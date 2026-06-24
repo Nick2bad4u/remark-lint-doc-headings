@@ -32,14 +32,14 @@ export interface DocHeadingsOptions {
     /**
      * Excluded path globs matched after `include`.
      *
-     * @default
+     * Defaults to common non-rule docs under `docs/rules`.
      */
     readonly exclude?: PathPattern;
 
     /**
      * H1 validation options. Set to `false` to disable H1 checks.
      *
-     * @default { requireExactlyOne: true, requireFileNameMatch: true }
+     * Defaults to requiring exactly one H1 that matches the file name.
      */
     readonly h1?: false | H1Options;
 
@@ -59,14 +59,19 @@ export interface DocHeadingsOptions {
     /**
      * Included path globs.
      *
-     * @default docs/rules markdown files
+     * Defaults to Markdown files under `docs/rules`.
      */
     readonly include?: PathPattern;
 
     /** Pattern required inside `## Package documentation` when label checks run. */
     readonly packageDocumentationLabelPattern?: PatternExpression;
 
-    /** Require a replacement link in `## Deprecated` sections. */
+    /**
+     * Require a replacement link in `## Deprecated` sections.
+     *
+     * Defaults to `true` for the built-in ESLint rule-doc preset and `false`
+     * for custom `h2Headings`.
+     */
     readonly requireDeprecatedReplacementLink?: boolean;
 
     /** Require `## Package documentation`. */

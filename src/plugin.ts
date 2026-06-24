@@ -48,13 +48,14 @@ interface NormalizedOptions {
     readonly h1: false | H1Options;
     readonly h2Headings: readonly HeadingDefinition[];
     readonly include: PathPattern;
-    readonly packageDocumentationLabelPattern: RegExp;
+    readonly packageDocumentationLabelPattern: RegExp | undefined;
     readonly requireDeprecatedReplacementLink: boolean;
     readonly requirePackageDocumentation: boolean;
     readonly requirePackageDocumentationLabel: boolean;
     readonly requireRuleCatalogId: boolean;
     readonly ruleCatalogIdLinePattern: RegExp;
     readonly ruleNamespaceAliases: readonly string[];
+    readonly shouldValidatePackageDocumentationPlacement: boolean;
 }
 
 interface PackageMetadata {
@@ -73,7 +74,6 @@ const defaultExclude = [
     "docs/rules/presets/**",
 ] as const;
 const defaultRuleCatalogIdLinePattern = /^> \*\*Rule catalog ID:\*\* R\d{3}$/v;
-const defaultPackageDocumentationLabelPattern = /package documentation:$/mv;
 
 const eslintRuleDocHeadings = [
     {
@@ -294,14 +294,38 @@ function getNodeText(node: Node): string {
     return "";
 }
 
-function getPatternExpression(
-    expression: PatternExpression | undefined,
-    fallback: RegExp
-): RegExp {
-    if (expression === undefined) {
-        return fallback;
-    }
+function getPackageDocumentationSettings(
+    options: DocHeadingsOptions,
+    h2Headings: readonly HeadingDefinition[],
+    headingToggles: Partial<Record<RuleDocHeadingKey, boolean>>,
+    isUsingBuiltInH2Headings: boolean
+): Pick<
+    NormalizedOptions,
+    | "requirePackageDocumentationLabel"
+    | "shouldValidatePackageDocumentationPlacement"
+> {
+    const hasPackageDocumentationEnabled =
+        isUsingBuiltInH2Headings &&
+        Boolean(headingToggles.packageDocumentation) &&
+        hasConfiguredH2Heading(h2Headings, "Package documentation");
+    const hasFurtherReadingEnabled =
+        isUsingBuiltInH2Headings &&
+        Boolean(headingToggles.furtherReading) &&
+        hasConfiguredH2Heading(h2Headings, "Further reading");
+    const requiresPackageDocumentationLabel =
+        options.requirePackageDocumentationLabel ??
+        options.packageDocumentationLabelPattern !== undefined;
 
+    return {
+        requirePackageDocumentationLabel: requiresPackageDocumentationLabel,
+        shouldValidatePackageDocumentationPlacement:
+            options.requirePackageDocumentation === true ||
+            requiresPackageDocumentationLabel ||
+            (hasPackageDocumentationEnabled && hasFurtherReadingEnabled),
+    };
+}
+
+function getPatternExpression(expression: PatternExpression): RegExp {
     return typeof expression === "string"
         ? new RegExp(expression, "u")
         : expression;
@@ -376,12 +400,29 @@ function hasChildren(
     );
 }
 
+function hasConfiguredH2Heading(
+    h2Headings: readonly HeadingDefinition[],
+    heading: string
+): boolean {
+    return h2Headings.some((definition) => definition.heading === heading);
+}
+
 function hasMarkdownLinkMarker(markdown: string): boolean {
     return (
         markdown.includes("[") &&
         markdown.includes("](") &&
         markdown.includes(")")
     );
+}
+
+function hasPackageDocumentationLabel(markdown: string): boolean {
+    return markdown
+        .split(/\r?\n/v)
+        .some(
+            (line) =>
+                line.endsWith(" package documentation:") &&
+                line.trim() !== "package documentation:"
+        );
 }
 
 function hasValue(value: unknown): value is { readonly value: string } {
@@ -420,21 +461,31 @@ function normalizeOptions(
             h1: false,
             h2Headings: [],
             include: [],
-            packageDocumentationLabelPattern:
-                defaultPackageDocumentationLabelPattern,
+            packageDocumentationLabelPattern: undefined,
             requireDeprecatedReplacementLink: false,
             requirePackageDocumentation: false,
             requirePackageDocumentationLabel: false,
             requireRuleCatalogId: false,
             ruleCatalogIdLinePattern: defaultRuleCatalogIdLinePattern,
             ruleNamespaceAliases: [],
+            shouldValidatePackageDocumentationPlacement: false,
         };
     }
 
+    const headingToggles = { ...defaultHeadingToggles, ...options.headings };
+    const h2Headings =
+        options.h2Headings ?? getEnabledBuiltInHeadings(options.headings);
+    const isUsingBuiltInH2Headings = options.h2Headings === undefined;
     const h1 = options.h1 ?? {
         requireExactlyOne: true,
         requireFileNameMatch: true,
     };
+    const packageDocumentationSettings = getPackageDocumentationSettings(
+        options,
+        h2Headings,
+        headingToggles,
+        isUsingBuiltInH2Headings
+    );
 
     return {
         allowUnknownHeadings: options.allowUnknownHeadings ?? false,
@@ -443,28 +494,31 @@ function normalizeOptions(
             getEnabledDetailHeadings(options.headings),
         exclude: options.exclude ?? defaultExclude,
         h1,
-        h2Headings:
-            options.h2Headings ?? getEnabledBuiltInHeadings(options.headings),
+        h2Headings,
         include: options.include ?? defaultInclude,
-        packageDocumentationLabelPattern: getPatternExpression(
-            options.packageDocumentationLabelPattern,
-            defaultPackageDocumentationLabelPattern
-        ),
+        packageDocumentationLabelPattern:
+            options.packageDocumentationLabelPattern === undefined
+                ? undefined
+                : getPatternExpression(
+                      options.packageDocumentationLabelPattern
+                  ),
         requireDeprecatedReplacementLink:
-            options.requireDeprecatedReplacementLink ?? true,
+            options.requireDeprecatedReplacementLink ??
+            (isUsingBuiltInH2Headings && headingToggles.deprecated),
         requirePackageDocumentation:
             options.requirePackageDocumentation ?? false,
         requirePackageDocumentationLabel:
-            options.requirePackageDocumentationLabel ??
-            options.packageDocumentationLabelPattern !== undefined,
+            packageDocumentationSettings.requirePackageDocumentationLabel,
         requireRuleCatalogId:
             options.requireRuleCatalogId ??
             options.ruleCatalogIdLinePattern !== undefined,
-        ruleCatalogIdLinePattern: getPatternExpression(
-            options.ruleCatalogIdLinePattern,
-            defaultRuleCatalogIdLinePattern
-        ),
+        ruleCatalogIdLinePattern:
+            options.ruleCatalogIdLinePattern === undefined
+                ? defaultRuleCatalogIdLinePattern
+                : getPatternExpression(options.ruleCatalogIdLinePattern),
         ruleNamespaceAliases: options.ruleNamespaceAliases ?? [],
+        shouldValidatePackageDocumentationPlacement:
+            packageDocumentationSettings.shouldValidatePackageDocumentationPlacement,
     };
 }
 
@@ -763,6 +817,7 @@ function validateSpecialSections(
     }
 
     if (
+        options.shouldValidatePackageDocumentationPlacement &&
         packageDocumentationIndex !== -1 &&
         furtherReadingIndex !== -1 &&
         packageDocumentationIndex !== furtherReadingIndex - 1
@@ -789,8 +844,12 @@ function validateSpecialSections(
             packageHeading,
             h2Headings[packageDocumentationIndex + 1]
         );
+        const hasLabel =
+            options.packageDocumentationLabelPattern === undefined
+                ? hasPackageDocumentationLabel(packageContent)
+                : options.packageDocumentationLabelPattern.test(packageContent);
 
-        if (!options.packageDocumentationLabelPattern.test(packageContent)) {
+        if (!hasLabel) {
             report(
                 file,
                 "`## Package documentation` must include at least one `<package> package documentation:` label line.",

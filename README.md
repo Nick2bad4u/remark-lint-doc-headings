@@ -11,6 +11,11 @@ headings, optional H3 detail heading placement, deprecated-section replacement
 links, package documentation labels, and rule catalog markers. Projects can
 replace the default headings and globs for non-ESLint documentation.
 
+ESLint-specific section checks stay tied to the built-in preset by default.
+Custom `h2Headings` configurations can opt into those checks explicitly without
+getting diagnostics just because a custom document happens to use headings such
+as `Deprecated` or `Package documentation`.
+
 ## Install
 
 ```sh
@@ -112,6 +117,8 @@ Disable individual built-in checks with `headings`:
 - `headings`: built-in ESLint rule-doc heading toggles.
 - `ruleNamespaceAliases`: extra aliases accepted for ESLint rule-doc H1 titles.
 - `requireDeprecatedReplacementLink`: require links in `## Deprecated` sections.
+  Defaults to `true` for the built-in ESLint rule-doc preset and `false` for
+  custom `h2Headings`.
 - `requirePackageDocumentation`: require `## Package documentation`.
 - `requirePackageDocumentationLabel`: require package documentation label lines.
 - `packageDocumentationLabelPattern`: label pattern as a `RegExp` or pattern
