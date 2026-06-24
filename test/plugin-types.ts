@@ -1,0 +1,33 @@
+import type {
+    DetailHeadingDefinition,
+    DocHeadingsOptions,
+    HeadingDefinition,
+    RuleDocHeadingKey,
+} from "../src/plugin.js";
+
+const headingKey: RuleDocHeadingKey = "targetedPatternScope";
+const h2Headings: readonly HeadingDefinition[] = [
+    { heading: "Summary", required: true },
+    { heading: "Usage" },
+];
+const detailHeadings: readonly DetailHeadingDefinition[] = [
+    { heading: "Options", parents: ["Usage"] },
+];
+
+export const options: DocHeadingsOptions = {
+    allowUnknownHeadings: true,
+    detailHeadings,
+    h1: {
+        allowedTitles: ["custom-title"],
+        requireExactlyOne: true,
+        requireFileNameMatch: false,
+    },
+    h2Headings,
+    headings: {
+        [headingKey]: true,
+    },
+    include: ["docs/**/*.md", "guides/**/*.mdx"],
+    packageDocumentationLabelPattern: String.raw`^[^\r\n]+ package documentation:$`,
+    ruleCatalogIdLinePattern: String.raw`^> \*\*Rule catalog ID:\*\* R\d{3}$`,
+    ruleNamespaceAliases: ["example"],
+};

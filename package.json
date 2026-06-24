@@ -1,0 +1,138 @@
+{
+    "$schema": "https://www.schemastore.org/package.json",
+    "name": "remark-lint-doc-headings",
+    "version": "0.1.0",
+    "private": false,
+    "description": "Remark lint rule for enforcing ordered documentation headings in selected Markdown files.",
+    "keywords": [
+        "documentation",
+        "headings",
+        "lint",
+        "markdown",
+        "remark",
+        "remark-lint",
+        "remark-plugin",
+        "unified"
+    ],
+    "homepage": "https://github.com/Nick2bad4u/remark-lint-doc-headings#readme",
+    "bugs": {
+        "url": "https://github.com/Nick2bad4u/remark-lint-doc-headings/issues",
+        "email": "20943337+Nick2bad4u@users.noreply.github.com"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Nick2bad4u/remark-lint-doc-headings.git"
+    },
+    "license": "MIT",
+    "author": "Nick2bad4u <20943337+Nick2bad4u@users.noreply.github.com> (https://github.com/Nick2bad4u)",
+    "contributors": [
+        {
+            "name": "Nick2bad4u",
+            "email": "20943337+Nick2bad4u@users.noreply.github.com",
+            "url": "https://github.com/Nick2bad4u"
+        }
+    ],
+    "sideEffects": false,
+    "type": "module",
+    "exports": {
+        ".": {
+            "types": "./dist/plugin.d.ts",
+            "import": "./dist/plugin.js",
+            "require": null
+        },
+        "./types": {
+            "types": "./dist/types.d.ts",
+            "import": "./dist/types.js",
+            "require": null
+        },
+        "./package.json": "./package.json"
+    },
+    "main": "./dist/plugin.js",
+    "types": "./dist/plugin.d.ts",
+    "files": [
+        "dist",
+        "README.md"
+    ],
+    "scripts": {
+        "build": "tsc -p tsconfig.build.json",
+        "changelog:generate": "git-cliff --config cliff.toml --output CHANGELOG.md",
+        "changelog:preview": "git-cliff --config cliff.toml --unreleased",
+        "changelog:release-notes": "git-cliff --config cliff.toml --current --strip all",
+        "clean:dist": "node -e \"import('node:fs').then(({ rmSync }) => rmSync('dist', { recursive: true, force: true }))\"",
+        "coverage": "npm run build && vitest run --coverage",
+        "lint": "eslint . --cache --cache-strategy content --cache-location .cache/.eslintcache",
+        "lint:all": "npm run lint && npm run typecheck && npm run test && npm run lint:prettier && npm run lint:package && npm run lint:secretlint && npm run lint:yaml",
+        "lint:package": "npm run lint:package-json && npm run lint:package-check",
+        "lint:package-check": "npm pack --dry-run && publint && attw --pack . --profile esm-only",
+        "lint:package-json": "npmPkgJsonLint . --config .npmpackagejsonlintrc.json",
+        "lint:prettier": "prettier . --log-level warn --cache --cache-location=.cache/.prettier-cache --cache-strategy=content --check",
+        "lint:prettier:fix": "prettier . --log-level warn --cache --cache-location=.cache/.prettier-cache --cache-strategy=content --write",
+        "lint:secretlint": "secretlint --secretlintrc .secretlintrc.cjs .",
+        "lint:yaml": "eslint --cache --cache-strategy content --cache-location .cache/.eslintcache \"**/*.{yml,yaml}\"",
+        "prepack": "npm run build",
+        "release:check": "npm run release:verify",
+        "release:verify": "npm run build && npm run lint:all && npm run coverage && npm run lint:package-check",
+        "test": "npm run build && vitest run",
+        "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.vitest-typecheck.json --noEmit",
+        "update-actions": "npx actions-up --yes --style sha",
+        "update-deps": "npx ncu -i --install never && npm update --force && npm install --force"
+    },
+    "overrides": {
+        "esbuild": "0.28.1"
+    },
+    "dependencies": {
+        "picomatch": "^4.0.4",
+        "ts-extras": "^1.0.0",
+        "unified": "^11.0.5",
+        "unified-lint-rule": "^3.0.1",
+        "vfile": "^6.0.3"
+    },
+    "devDependencies": {
+        "@arethetypeswrong/cli": "^0.18.3",
+        "@types/mdast": "^4.0.4",
+        "@types/node": "^26.0.0",
+        "@types/picomatch": "^4.0.3",
+        "@vitest/coverage-v8": "^4.1.9",
+        "eslint": "^10.5.0",
+        "eslint-config-nick2bad4u": "^2.0.4",
+        "git-cliff": "^2.13.1",
+        "gitleaks-config-nick2bad4u": "^1.0.2",
+        "npm-package-json-lint": "^10.4.1",
+        "npm-package-json-lint-config-nick2bad4u": "^1.0.3",
+        "picocolors": "^1.1.1",
+        "prettier": "^3.8.4",
+        "prettier-config-nick2bad4u": "^1.0.17",
+        "publint": "^0.3.21",
+        "remark": "^15.0.1",
+        "secretlint": "^13.0.2",
+        "secretlint-config-nick2bad4u": "^1.1.0",
+        "sort-package-json": "^4.0.0",
+        "tsdoc-config-nick2bad4u": "^1.0.5",
+        "typescript": "^6.0.3",
+        "vitest": "^4.1.9"
+    },
+    "peerDependencies": {
+        "remark": "^15.0.1"
+    },
+    "packageManager": "npm@11.17.0",
+    "engines": {
+        "node": ">=22.0.0"
+    },
+    "devEngines": {
+        "packageManager": {
+            "name": "npm",
+            "version": ">=11.0.0",
+            "onFail": "error"
+        },
+        "runtime": {
+            "name": "node",
+            "onFail": "error",
+            "version": ">=22.0.0"
+        }
+    },
+    "publishConfig": {
+        "provenance": true,
+        "registry": "https://registry.npmjs.org/"
+    },
+    "readme": "README.md"
+}
