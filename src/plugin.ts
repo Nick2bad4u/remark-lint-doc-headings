@@ -1,5 +1,5 @@
 import type { Heading, Root } from "mdast";
-import type { Plugin } from "unified";
+import type { Plugin, Preset } from "unified";
 import type { Node } from "unist";
 import type { VFile } from "vfile";
 
@@ -67,8 +67,14 @@ const url = "https://github.com/Nick2bad4u/remark-lint-doc-headings";
 const eslintPluginPackagePrefix = "eslint-plugin-";
 const packageMetadataCache = new Map<string, PackageMetadata | undefined>();
 
-const defaultInclude = "docs/rules/**/*.md";
-const defaultExclude = [
+const defaultInclude = [
+    "**/*.markdown",
+    "**/*.md",
+    "**/*.mdx",
+] as const;
+const defaultExclude = [] as const;
+const eslintRuleDocInclude = "docs/rules/**/*.md";
+const eslintRuleDocExclude = [
     "docs/rules/getting-started.md",
     "docs/rules/overview.md",
     "docs/rules/presets/**",
@@ -167,17 +173,10 @@ const defaultHeadingToggles = Object.freeze({
 /** Unified-compatible plugin type for the doc-headings lint rule. */
 export type DocHeadingsPlugin = Plugin<[config?: DocHeadingsConfig], Root>;
 
+/** Unified preset object exported by this package. */
+export type DocHeadingsPreset = Preset;
+
 const normalizePath = (value: string): string => value.replaceAll("\\", "/");
-
-function getEnabledBuiltInHeadings(
-    headings: Partial<Record<RuleDocHeadingKey, boolean>> | undefined
-): readonly BuiltInHeadingDefinition[] {
-    const toggles = { ...defaultHeadingToggles, ...headings };
-
-    return eslintRuleDocHeadings.filter(
-        (definition) => toggles[definition.key]
-    );
-}
 
 function getEnabledDetailHeadings(
     headings: Partial<Record<RuleDocHeadingKey, boolean>> | undefined
@@ -295,23 +294,12 @@ function getNodeText(node: Node): string {
 }
 
 function getPackageDocumentationSettings(
-    options: DocHeadingsOptions,
-    h2Headings: readonly HeadingDefinition[],
-    headingToggles: Partial<Record<RuleDocHeadingKey, boolean>>,
-    isUsingBuiltInH2Headings: boolean
+    options: DocHeadingsOptions
 ): Pick<
     NormalizedOptions,
     | "requirePackageDocumentationLabel"
     | "shouldValidatePackageDocumentationPlacement"
 > {
-    const hasPackageDocumentationEnabled =
-        isUsingBuiltInH2Headings &&
-        Boolean(headingToggles.packageDocumentation) &&
-        hasConfiguredH2Heading(h2Headings, "Package documentation");
-    const hasFurtherReadingEnabled =
-        isUsingBuiltInH2Headings &&
-        Boolean(headingToggles.furtherReading) &&
-        hasConfiguredH2Heading(h2Headings, "Further reading");
     const requiresPackageDocumentationLabel =
         options.requirePackageDocumentationLabel ??
         options.packageDocumentationLabelPattern !== undefined;
@@ -319,9 +307,9 @@ function getPackageDocumentationSettings(
     return {
         requirePackageDocumentationLabel: requiresPackageDocumentationLabel,
         shouldValidatePackageDocumentationPlacement:
+            options.requirePackageDocumentationPlacement === true ||
             options.requirePackageDocumentation === true ||
-            requiresPackageDocumentationLabel ||
-            (hasPackageDocumentationEnabled && hasFurtherReadingEnabled),
+            requiresPackageDocumentationLabel,
     };
 }
 
@@ -400,13 +388,6 @@ function hasChildren(
     );
 }
 
-function hasConfiguredH2Heading(
-    h2Headings: readonly HeadingDefinition[],
-    heading: string
-): boolean {
-    return h2Headings.some((definition) => definition.heading === heading);
-}
-
 function hasMarkdownLinkMarker(markdown: string): boolean {
     return (
         markdown.includes("[") &&
@@ -472,26 +453,22 @@ function normalizeOptions(
         };
     }
 
-    const headingToggles = { ...defaultHeadingToggles, ...options.headings };
-    const h2Headings =
-        options.h2Headings ?? getEnabledBuiltInHeadings(options.headings);
-    const isUsingBuiltInH2Headings = options.h2Headings === undefined;
+    const h2Headings = options.h2Headings ?? [];
     const h1 = options.h1 ?? {
         requireExactlyOne: true,
-        requireFileNameMatch: true,
+        requireFileNameMatch: false,
     };
-    const packageDocumentationSettings = getPackageDocumentationSettings(
-        options,
-        h2Headings,
-        headingToggles,
-        isUsingBuiltInH2Headings
-    );
+    const packageDocumentationSettings =
+        getPackageDocumentationSettings(options);
 
     return {
-        allowUnknownHeadings: options.allowUnknownHeadings ?? false,
+        allowUnknownHeadings:
+            options.allowUnknownHeadings ?? options.h2Headings === undefined,
         detailHeadings:
             options.detailHeadings ??
-            getEnabledDetailHeadings(options.headings),
+            (options.h2Headings === undefined
+                ? []
+                : getEnabledDetailHeadings(options.headings)),
         exclude: options.exclude ?? defaultExclude,
         h1,
         h2Headings,
@@ -503,8 +480,7 @@ function normalizeOptions(
                       options.packageDocumentationLabelPattern
                   ),
         requireDeprecatedReplacementLink:
-            options.requireDeprecatedReplacementLink ??
-            (isUsingBuiltInH2Headings && headingToggles.deprecated),
+            options.requireDeprecatedReplacementLink ?? false,
         requirePackageDocumentation:
             options.requirePackageDocumentation ?? false,
         requirePackageDocumentationLabel:
@@ -883,6 +859,24 @@ function validateSpecialSections(
     }
 }
 
+function withRequiredHeadings(
+    headings: readonly HeadingDefinition[],
+    options: { readonly includeDeprecated?: boolean } = {}
+): readonly HeadingDefinition[] {
+    return headings.map((heading) => {
+        if (
+            heading.heading === "Deprecated" &&
+            options.includeDeprecated !== true
+        ) {
+            return heading.required === undefined
+                ? { heading: heading.heading }
+                : { heading: heading.heading, required: heading.required };
+        }
+
+        return { heading: heading.heading, required: true };
+    });
+}
+
 /**
  * Remark lint rule that enforces ordered documentation headings in matched
  * Markdown files.
@@ -923,5 +917,45 @@ const remarkLintDocHeadings: DocHeadingsPlugin = lintRule(
         validateSpecialSections(file, h2Headings, options);
     }
 );
+
+/** Options for the built-in ESLint rule documentation preset. */
+export const eslintOptions = {
+    detailHeadings: eslintRuleDocDetailHeadings,
+    exclude: eslintRuleDocExclude,
+    h1: {
+        requireExactlyOne: true,
+        requireFileNameMatch: true,
+    },
+    h2Headings: eslintRuleDocHeadings,
+    headings: defaultHeadingToggles,
+    include: eslintRuleDocInclude,
+    requireDeprecatedReplacementLink: true,
+    requirePackageDocumentationPlacement: true,
+} as const satisfies DocHeadingsOptions;
+
+/** Options for the strict ESLint rule documentation preset. */
+export const eslintStrictOptions = {
+    ...eslintOptions,
+    h2Headings: withRequiredHeadings(eslintRuleDocHeadings),
+    requirePackageDocumentation: true,
+    requirePackageDocumentationLabel: true,
+    requireRuleCatalogId: true,
+} as const satisfies DocHeadingsOptions;
+
+/** Unified preset for ESLint rule documentation headings. */
+export const eslint = {
+    plugins: [[remarkLintDocHeadings, eslintOptions]],
+} satisfies DocHeadingsPreset;
+
+/** Unified preset for stricter ESLint rule documentation headings. */
+export const eslintStrict = {
+    plugins: [[remarkLintDocHeadings, eslintStrictOptions]],
+} satisfies DocHeadingsPreset;
+
+/** Named preset collection, including the hyphenated `eslint-strict` key. */
+export const presets = {
+    eslint,
+    "eslint-strict": eslintStrict,
+} as const;
 
 export default remarkLintDocHeadings;

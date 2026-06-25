@@ -69,8 +69,7 @@ export interface DocHeadingsOptions {
     /**
      * Require a replacement link in `## Deprecated` sections.
      *
-     * Defaults to `true` for the built-in ESLint rule-doc preset and `false`
-     * for custom `h2Headings`.
+     * Defaults to `false`. The ESLint presets enable this check.
      */
     readonly requireDeprecatedReplacementLink?: boolean;
 
@@ -79,6 +78,12 @@ export interface DocHeadingsOptions {
 
     /** Require package documentation label lines. */
     readonly requirePackageDocumentationLabel?: boolean;
+
+    /**
+     * Require `## Package documentation` to appear immediately before `##
+     * Further reading`.
+     */
+    readonly requirePackageDocumentationPlacement?: boolean;
 
     /** Require exactly one rule catalog marker line. */
     readonly requireRuleCatalogId?: boolean;

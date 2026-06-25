@@ -1,8 +1,11 @@
-import type {
-    DetailHeadingDefinition,
-    DocHeadingsOptions,
-    HeadingDefinition,
-    RuleDocHeadingKey,
+import {
+    type DetailHeadingDefinition,
+    type DocHeadingsOptions,
+    type DocHeadingsPreset,
+    eslint,
+    type HeadingDefinition,
+    presets,
+    type RuleDocHeadingKey,
 } from "../src/plugin.js";
 
 const headingKey: RuleDocHeadingKey = "targetedPatternScope";
@@ -31,3 +34,9 @@ export const options: DocHeadingsOptions = {
     ruleCatalogIdLinePattern: String.raw`^> \*\*Rule catalog ID:\*\* R\d{3}$`,
     ruleNamespaceAliases: ["example"],
 };
+
+const eslintPreset: DocHeadingsPreset = eslint;
+const eslintStrictPreset: DocHeadingsPreset = presets["eslint-strict"];
+
+void eslintPreset;
+void eslintStrictPreset;

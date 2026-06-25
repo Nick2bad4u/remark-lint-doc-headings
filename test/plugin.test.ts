@@ -4,6 +4,9 @@ import { describe, expect, it } from "vitest";
 
 import remarkLintDocHeadings, {
     type DocHeadingsOptions,
+    eslint,
+    eslintOptions,
+    eslintStrict,
 } from "../src/plugin.js";
 
 const fixturePath = path.resolve("docs/rules/no-bad-practice.md");
@@ -21,8 +24,22 @@ async function processMarkdown(markdown: string, options?: DocHeadingsOptions) {
 }
 
 describe("remark-lint-doc-headings", () => {
+    it("applies generic heading checks by default", async () => {
+        const file = await remark()
+            .use(remarkLintDocHeadings)
+            .process({
+                path: path.resolve("docs/guide.md"),
+                value: "# Guide\n\n## Setup\n\n## Setup\n\n## Deprecated\n\nNo replacement link.\n",
+            });
+
+        expect(file.messages.map((message) => message.reason)).toStrictEqual([
+            "Duplicate H2 heading `Setup` is not allowed.",
+        ]);
+    });
+
     it("accepts the default ESLint rule-doc heading order", async () => {
-        const file = await processMarkdown(`# no-bad-practice
+        const file = await processMarkdown(
+            `# no-bad-practice
 
 ## Targeted pattern scope
 
@@ -57,13 +74,16 @@ good();
 ## Further reading
 
 - [Reference](https://example.com)
-`);
+`,
+            eslintOptions
+        );
 
         expect(file.messages).toStrictEqual([]);
     });
 
     it("reports missing, unknown, duplicate, and out-of-order H2 headings", async () => {
-        const file = await processMarkdown(`# no-bad-practice
+        const file = await processMarkdown(
+            `# no-bad-practice
 
 ## Why this rule exists
 
@@ -80,7 +100,9 @@ Unexpected.
 ## Unknown
 
 Duplicate.
-`);
+`,
+            eslintOptions
+        );
 
         expect(file.messages.map((message) => message.ruleId)).toStrictEqual([
             "doc-headings",
@@ -110,6 +132,7 @@ Duplicate.
     it("validates H1 headings with package namespace aliases", async () => {
         const file = await remark()
             .use(remarkLintDocHeadings, {
+                ...eslintOptions,
                 ruleNamespaceAliases: ["custom-plugin"],
             })
             .process({
@@ -285,6 +308,7 @@ remark-lint-doc-headings package documentation:
 > **Rule catalog ID:** R001
 `,
             {
+                ...eslintOptions,
                 requirePackageDocumentation: true,
                 requirePackageDocumentationLabel: true,
                 requireRuleCatalogId: true,
@@ -295,7 +319,8 @@ remark-lint-doc-headings package documentation:
     });
 
     it("reports detail headings that violate the configured detail order", async () => {
-        const file = await processMarkdown(`# no-bad-practice
+        const file = await processMarkdown(
+            `# no-bad-practice
 
 ## Targeted pattern scope
 
@@ -326,7 +351,9 @@ Good.
 ## Further reading
 
 Reference.
-`);
+`,
+            eslintOptions
+        );
 
         expect(file.messages.map((message) => message.reason)).toEqual(
             expect.arrayContaining([
@@ -368,6 +395,7 @@ No label.
 Reference.
 `,
             {
+                ...eslintOptions,
                 requirePackageDocumentation: true,
                 requirePackageDocumentationLabel: true,
                 requireRuleCatalogId: true,
@@ -379,6 +407,90 @@ Reference.
                 "`## Package documentation` must include at least one `<package> package documentation:` label line.",
                 "Missing required rule catalog marker line `> **Rule catalog ID:** R###`.",
             ])
+        );
+    });
+
+    it("exports an ESLint preset for standard rule docs", async () => {
+        const file = await remark()
+            .use(eslint)
+            .process({
+                path: fixturePath,
+                value: `# no-bad-practice
+
+## Targeted pattern scope
+
+Scope.
+
+## What this rule reports
+
+Reports.
+
+## Why this rule exists
+
+Rationale.
+
+## ❌ Incorrect
+
+Bad.
+
+## ✅ Correct
+
+Good.
+
+## Further reading
+
+Reference.
+`,
+            });
+
+        expect(file.messages).toStrictEqual([]);
+    });
+
+    it("exports a strict ESLint preset with generally optional headings required", async () => {
+        const file = await remark()
+            .use(eslintStrict)
+            .process({
+                path: fixturePath,
+                value: `# no-bad-practice
+
+## Targeted pattern scope
+
+Scope.
+
+## What this rule reports
+
+Reports.
+
+## Why this rule exists
+
+Rationale.
+
+## ❌ Incorrect
+
+Bad.
+
+## ✅ Correct
+
+Good.
+
+## Further reading
+
+Reference.
+`,
+            });
+
+        expect(file.messages.map((message) => message.reason)).toEqual(
+            expect.arrayContaining([
+                "Missing required H2 heading `Behavior and migration notes`.",
+                "Missing required H2 heading `Additional examples`.",
+                "Missing required H2 heading `ESLint flat config example`.",
+                "Missing required H2 heading `When not to use it`.",
+                "Missing required `## Package documentation` section.",
+                "Missing required rule catalog marker line `> **Rule catalog ID:** R###`.",
+            ])
+        );
+        expect(file.messages.map((message) => message.reason)).not.toContain(
+            "Missing required H2 heading `Deprecated`."
         );
     });
 });
