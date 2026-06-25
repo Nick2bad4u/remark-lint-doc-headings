@@ -1,0 +1,15 @@
+{
+    "commit": false,
+    "commitConvention": "gitmoji",
+    "contributors": [],
+    "contributorsPerLine": 7,
+    "files": [
+        "README.md"
+    ],
+    "imageSize": 100,
+    "linkToUsage": true,
+    "projectName": "remark-lint-doc-headings",
+    "projectOwner": "Nick2bad4u",
+    "repoHost": "https://github.com",
+    "repoType": "github"
+}

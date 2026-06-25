@@ -31,6 +31,8 @@ export const options: DocHeadingsOptions = {
     },
     include: ["docs/**/*.md", "guides/**/*.mdx"],
     packageDocumentationLabelPattern: String.raw`^[^\r\n]+ package documentation:$`,
+    requireH2HeadingOrder: false,
+    requireNoSkippedHeadingLevels: true,
     ruleCatalogIdLinePattern: String.raw`^> \*\*Rule catalog ID:\*\* R\d{3}$`,
     ruleNamespaceAliases: ["example"],
 };

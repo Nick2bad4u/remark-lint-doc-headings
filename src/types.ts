@@ -19,33 +19,30 @@ export interface DocHeadingsOptions {
     /**
      * Allow H2 headings that are not listed in `headings`.
      *
-     * @default false
+     * Defaults to `true` when `h2Headings` is omitted and `false` when
+     * `h2Headings` is configured.
      */
     readonly allowUnknownHeadings?: boolean;
 
     /**
-     * Ordered H3 detail headings. Defaults to the ESLint rule-doc details used
-     * under "Targeted pattern scope" and "What this rule reports".
+     * Ordered H3 detail headings.
      */
     readonly detailHeadings?: readonly DetailHeadingDefinition[];
 
     /**
      * Excluded path globs matched after `include`.
-     *
-     * Defaults to common non-rule docs under `docs/rules`.
      */
     readonly exclude?: PathPattern;
 
     /**
      * H1 validation options. Set to `false` to disable H1 checks.
      *
-     * Defaults to requiring exactly one H1 that matches the file name.
+     * Defaults to requiring exactly one H1.
      */
     readonly h1?: false | H1Options;
 
     /**
-     * Ordered H2 heading definitions. When omitted, the ESLint rule-doc heading
-     * preset is used.
+     * H2 heading definitions with optional required flags.
      */
     readonly h2Headings?: readonly HeadingDefinition[];
 
@@ -72,6 +69,20 @@ export interface DocHeadingsOptions {
      * Defaults to `false`. The ESLint presets enable this check.
      */
     readonly requireDeprecatedReplacementLink?: boolean;
+
+    /**
+     * Require configured H2 headings to follow the `h2Headings` sequence.
+     *
+     * Defaults to `true`.
+     */
+    readonly requireH2HeadingOrder?: boolean;
+
+    /**
+     * Require heading levels to increase by no more than one level at a time.
+     *
+     * Defaults to `false`.
+     */
+    readonly requireNoSkippedHeadingLevels?: boolean;
 
     /** Require `## Package documentation`. */
     readonly requirePackageDocumentation?: boolean;

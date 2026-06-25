@@ -1,4 +1,5 @@
 import type { Heading, Root } from "mdast";
+import type { UnknownRecord } from "type-fest";
 import type { Plugin, Preset } from "unified";
 import type { Node } from "unist";
 import type { VFile } from "vfile";
@@ -6,7 +7,17 @@ import type { VFile } from "vfile";
 import { existsSync, readFileSync } from "node:fs";
 import * as path from "node:path";
 import picomatch from "picomatch";
-import { arrayFirst, arrayJoin } from "ts-extras";
+import {
+    arrayAt,
+    arrayFirst,
+    arrayIncludes,
+    arrayJoin,
+    isDefined,
+    isEmpty,
+    keyIn,
+    setHas,
+    stringSplit,
+} from "ts-extras";
 import { lintRule } from "unified-lint-rule";
 
 import type {
@@ -50,6 +61,8 @@ interface NormalizedOptions {
     readonly include: PathPattern;
     readonly packageDocumentationLabelPattern: RegExp | undefined;
     readonly requireDeprecatedReplacementLink: boolean;
+    readonly requireH2HeadingOrder: boolean;
+    readonly requireNoSkippedHeadingLevels: boolean;
     readonly requirePackageDocumentation: boolean;
     readonly requirePackageDocumentationLabel: boolean;
     readonly requireRuleCatalogId: boolean;
@@ -302,7 +315,7 @@ function getPackageDocumentationSettings(
 > {
     const requiresPackageDocumentationLabel =
         options.requirePackageDocumentationLabel ??
-        options.packageDocumentationLabelPattern !== undefined;
+        isDefined(options.packageDocumentationLabelPattern);
 
     return {
         requirePackageDocumentationLabel: requiresPackageDocumentationLabel,
@@ -361,12 +374,12 @@ function getSectionContent(
 ): string {
     const sectionPosition = sectionHeading.position;
     const nextSectionPosition = nextSectionHeading?.position;
-    const sectionStartOffset =
-        sectionPosition === undefined ? undefined : sectionPosition.end.offset;
-    const nextSectionOffset =
-        nextSectionPosition === undefined
-            ? undefined
-            : nextSectionPosition.start.offset;
+    const sectionStartOffset = isDefined(sectionPosition)
+        ? sectionPosition.end.offset
+        : undefined;
+    const nextSectionOffset = isDefined(nextSectionPosition)
+        ? nextSectionPosition.start.offset
+        : undefined;
     const startOffset =
         typeof sectionStartOffset === "number" ? sectionStartOffset : 0;
     const endOffset =
@@ -380,12 +393,20 @@ function getSectionContent(
 function hasChildren(
     value: unknown
 ): value is { readonly children: readonly Node[] } {
-    return (
-        typeof value === "object" &&
-        value !== null &&
-        "children" in value &&
-        Array.isArray(value.children)
-    );
+    return hasKey(value, "children") && Array.isArray(value.children);
+}
+
+function hasKey<Key extends string>(
+    value: unknown,
+    key: Key
+): value is Record<Key, unknown> {
+    if (typeof value === "object" && value !== null) {
+        const record = value as UnknownRecord;
+
+        return keyIn(record, key);
+    }
+
+    return false;
 }
 
 function hasMarkdownLinkMarker(markdown: string): boolean {
@@ -397,26 +418,19 @@ function hasMarkdownLinkMarker(markdown: string): boolean {
 }
 
 function hasPackageDocumentationLabel(markdown: string): boolean {
-    return markdown
-        .split(/\r?\n/v)
-        .some(
-            (line) =>
-                line.endsWith(" package documentation:") &&
-                line.trim() !== "package documentation:"
-        );
-}
-
-function hasValue(value: unknown): value is { readonly value: string } {
-    return (
-        typeof value === "object" &&
-        value !== null &&
-        "value" in value &&
-        typeof value.value === "string"
+    return stringSplit(markdown.replaceAll("\r\n", "\n"), "\n").some(
+        (line) =>
+            line.endsWith(" package documentation:") &&
+            line.trim() !== "package documentation:"
     );
 }
 
+function hasValue(value: unknown): value is { readonly value: string } {
+    return hasKey(value, "value") && typeof value.value === "string";
+}
+
 function isHeadingNode(node: Node): node is Heading {
-    return node.type === "heading" && "depth" in node;
+    return node.type === "heading" && hasKey(node, "depth");
 }
 
 function isMatchingPattern(filePath: string, patterns: PathPattern): boolean {
@@ -444,6 +458,8 @@ function normalizeOptions(
             include: [],
             packageDocumentationLabelPattern: undefined,
             requireDeprecatedReplacementLink: false,
+            requireH2HeadingOrder: false,
+            requireNoSkippedHeadingLevels: false,
             requirePackageDocumentation: false,
             requirePackageDocumentationLabel: false,
             requireRuleCatalogId: false,
@@ -454,6 +470,7 @@ function normalizeOptions(
     }
 
     const h2Headings = options.h2Headings ?? [];
+    const hasConfiguredH2Headings = isDefined(options.h2Headings);
     const h1 = options.h1 ?? {
         requireExactlyOne: true,
         requireFileNameMatch: false,
@@ -463,35 +480,36 @@ function normalizeOptions(
 
     return {
         allowUnknownHeadings:
-            options.allowUnknownHeadings ?? options.h2Headings === undefined,
+            options.allowUnknownHeadings ?? !hasConfiguredH2Headings,
         detailHeadings:
             options.detailHeadings ??
-            (options.h2Headings === undefined
-                ? []
-                : getEnabledDetailHeadings(options.headings)),
+            (hasConfiguredH2Headings
+                ? getEnabledDetailHeadings(options.headings)
+                : []),
         exclude: options.exclude ?? defaultExclude,
         h1,
         h2Headings,
         include: options.include ?? defaultInclude,
-        packageDocumentationLabelPattern:
-            options.packageDocumentationLabelPattern === undefined
-                ? undefined
-                : getPatternExpression(
-                      options.packageDocumentationLabelPattern
-                  ),
+        packageDocumentationLabelPattern: isDefined(
+            options.packageDocumentationLabelPattern
+        )
+            ? getPatternExpression(options.packageDocumentationLabelPattern)
+            : undefined,
         requireDeprecatedReplacementLink:
             options.requireDeprecatedReplacementLink ?? false,
+        requireH2HeadingOrder: options.requireH2HeadingOrder ?? true,
+        requireNoSkippedHeadingLevels:
+            options.requireNoSkippedHeadingLevels ?? false,
         requirePackageDocumentation:
             options.requirePackageDocumentation ?? false,
         requirePackageDocumentationLabel:
             packageDocumentationSettings.requirePackageDocumentationLabel,
         requireRuleCatalogId:
             options.requireRuleCatalogId ??
-            options.ruleCatalogIdLinePattern !== undefined,
-        ruleCatalogIdLinePattern:
-            options.ruleCatalogIdLinePattern === undefined
-                ? defaultRuleCatalogIdLinePattern
-                : getPatternExpression(options.ruleCatalogIdLinePattern),
+            isDefined(options.ruleCatalogIdLinePattern),
+        ruleCatalogIdLinePattern: isDefined(options.ruleCatalogIdLinePattern)
+            ? getPatternExpression(options.ruleCatalogIdLinePattern)
+            : defaultRuleCatalogIdLinePattern,
         ruleNamespaceAliases: options.ruleNamespaceAliases ?? [],
         shouldValidatePackageDocumentationPlacement:
             packageDocumentationSettings.shouldValidatePackageDocumentationPlacement,
@@ -548,13 +566,13 @@ function validateDetailHeadings(
 
         const detailHeading = detailHeadingByTitle.get(headingName);
 
-        if (detailHeading === undefined) {
+        if (!isDefined(detailHeading)) {
             continue;
         }
 
         if (
-            detailHeading.parents !== undefined &&
-            !detailHeading.parents.includes(currentH2HeadingName ?? "")
+            isDefined(detailHeading.parents) &&
+            !arrayIncludes(detailHeading.parents, currentH2HeadingName ?? "")
         ) {
             report(
                 file,
@@ -572,7 +590,7 @@ function validateDetailHeadings(
     for (const [leftIndex, left] of detailHeadings.entries()) {
         const leftHeadingIndex = detailHeadingIndexes.get(left.heading);
 
-        if (leftHeadingIndex === undefined) {
+        if (!isDefined(leftHeadingIndex)) {
             continue;
         }
 
@@ -580,7 +598,7 @@ function validateDetailHeadings(
             const rightHeadingIndex = detailHeadingIndexes.get(right.heading);
 
             if (
-                rightHeadingIndex !== undefined &&
+                isDefined(rightHeadingIndex) &&
                 leftHeadingIndex < rightHeadingIndex
             ) {
                 report(
@@ -602,7 +620,7 @@ function validateDuplicateHeadings(
     for (const heading of h2Headings) {
         const headingName = getNodeText(heading).trim();
 
-        if (seenHeadings.has(headingName)) {
+        if (setHas(seenHeadings, headingName)) {
             report(
                 file,
                 `Duplicate H2 heading \`${headingName}\` is not allowed.`,
@@ -639,12 +657,12 @@ function validateH1(
         return;
     }
 
-    const expectedFileTitle = normalizedFilePath
-        .split("/")
-        .at(-1)
-        ?.replace(/\.mdx?$/v, "");
+    const expectedFileTitle = arrayAt(
+        stringSplit(normalizedFilePath, "/"),
+        -1
+    )?.replace(/\.mdx?$/v, "");
 
-    if (expectedFileTitle === undefined) {
+    if (!isDefined(expectedFileTitle)) {
         return;
     }
 
@@ -659,19 +677,19 @@ function validateH1(
         options.h1
     );
 
-    if (expectedTitles.length === 0) {
+    if (isEmpty(expectedTitles)) {
         return;
     }
 
     const h1Heading = arrayFirst(h1Headings);
 
-    if (h1Heading === undefined) {
+    if (!isDefined(h1Heading)) {
         return;
     }
 
     const actualTitle = getNodeText(h1Heading).trim();
 
-    if (!expectedTitles.includes(actualTitle)) {
+    if (!arrayIncludes(expectedTitles, actualTitle)) {
         report(
             file,
             `H1 heading must match one of: ${arrayJoin(
@@ -701,7 +719,7 @@ function validateH2Headings(
         const headingOrder = headingOrderIndex.get(headingName);
         const headingNode = h2Headings[index];
 
-        if (headingOrder === undefined) {
+        if (!isDefined(headingOrder)) {
             if (!options.allowUnknownHeadings) {
                 report(
                     file,
@@ -716,7 +734,7 @@ function validateH2Headings(
             continue;
         }
 
-        if (headingOrder < lastOrder) {
+        if (options.requireH2HeadingOrder && headingOrder < lastOrder) {
             report(
                 file,
                 `Heading \`${headingName}\` is out of order. Follow the configured heading sequence.`,
@@ -732,13 +750,41 @@ function validateH2Headings(
             continue;
         }
 
-        if (!headingNames.includes(requiredHeading.heading)) {
+        const missingHeadingReason = `Missing required H2 heading \`${requiredHeading.heading}\`.`;
+
+        if (arrayIncludes(headingNames, requiredHeading.heading)) {
+            continue;
+        }
+
+        report(file, missingHeadingReason, undefined);
+    }
+}
+
+function validateHeadingLevels(
+    tree: Root,
+    file: VFile,
+    options: NormalizedOptions
+): void {
+    if (!options.requireNoSkippedHeadingLevels) {
+        return;
+    }
+
+    const headings = tree.children.filter(isHeadingNode);
+    let previousHeading: Heading | undefined;
+
+    for (const heading of headings) {
+        if (
+            isDefined(previousHeading) &&
+            heading.depth > previousHeading.depth + 1
+        ) {
             report(
                 file,
-                `Missing required H2 heading \`${requiredHeading.heading}\`.`,
-                undefined
+                `Heading levels must not skip from H${previousHeading.depth} to H${heading.depth}.`,
+                heading
             );
         }
+
+        previousHeading = heading;
     }
 }
 
@@ -773,7 +819,7 @@ function validateSpecialSections(
     ) {
         const deprecatedHeading = h2Headings[deprecatedSectionIndex];
 
-        if (deprecatedHeading === undefined) {
+        if (!isDefined(deprecatedHeading)) {
             return;
         }
 
@@ -811,7 +857,7 @@ function validateSpecialSections(
     ) {
         const packageHeading = h2Headings[packageDocumentationIndex];
 
-        if (packageHeading === undefined) {
+        if (!isDefined(packageHeading)) {
             return;
         }
 
@@ -820,10 +866,9 @@ function validateSpecialSections(
             packageHeading,
             h2Headings[packageDocumentationIndex + 1]
         );
-        const hasLabel =
-            options.packageDocumentationLabelPattern === undefined
-                ? hasPackageDocumentationLabel(packageContent)
-                : options.packageDocumentationLabelPattern.test(packageContent);
+        const hasLabel = isDefined(options.packageDocumentationLabelPattern)
+            ? options.packageDocumentationLabelPattern.test(packageContent)
+            : hasPackageDocumentationLabel(packageContent);
 
         if (!hasLabel) {
             report(
@@ -835,13 +880,15 @@ function validateSpecialSections(
     }
 
     if (options.requireRuleCatalogId) {
-        const ruleCatalogIdLines = String(file.value)
-            .split(/\r?\n/v)
+        const ruleCatalogIdLines = stringSplit(
+            String(file.value).replaceAll("\r\n", "\n"),
+            "\n"
+        )
             .map((line) => line.trimEnd())
             .filter((line) => options.ruleCatalogIdLinePattern.test(line));
         const place = h2Headings[furtherReadingIndex] ?? arrayFirst(h2Headings);
 
-        if (ruleCatalogIdLines.length === 0) {
+        if (isEmpty(ruleCatalogIdLines)) {
             report(
                 file,
                 "Missing required rule catalog marker line `> **Rule catalog ID:** R###`.",
@@ -868,9 +915,9 @@ function withRequiredHeadings(
             heading.heading === "Deprecated" &&
             options.includeDeprecated !== true
         ) {
-            return heading.required === undefined
-                ? { heading: heading.heading }
-                : { heading: heading.heading, required: heading.required };
+            return isDefined(heading.required)
+                ? { heading: heading.heading, required: heading.required }
+                : { heading: heading.heading };
         }
 
         return { heading: heading.heading, required: true };
@@ -911,6 +958,7 @@ const remarkLintDocHeadings: DocHeadingsPlugin = lintRule(
         const h2Headings = getHeadingsByDepth(tree, 2);
 
         validateH1(tree, file, normalizedFilePath, options);
+        validateHeadingLevels(tree, file, options);
         validateDuplicateHeadings(file, h2Headings);
         validateDetailHeadings(tree, file, options.detailHeadings);
         validateH2Headings(file, h2Headings, options);

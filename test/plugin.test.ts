@@ -200,6 +200,58 @@ Summary.
         );
     });
 
+    it("can allow configured H2 headings in any order", async () => {
+        const file = await remark()
+            .use(remarkLintDocHeadings, {
+                h1: false,
+                h2Headings: [
+                    { heading: "Summary", required: true },
+                    { heading: "Usage", required: true },
+                    { heading: "Reference", required: false },
+                ],
+                include: "guides/**/*.md",
+                requireH2HeadingOrder: false,
+            })
+            .process({
+                path: path.resolve("guides/getting-started.md"),
+                value: `# Getting started
+
+## Usage
+
+Use it.
+
+## Summary
+
+Summary.
+`,
+            });
+
+        expect(file.messages).toStrictEqual([]);
+    });
+
+    it("can report skipped heading levels", async () => {
+        const file = await remark()
+            .use(remarkLintDocHeadings, {
+                requireNoSkippedHeadingLevels: true,
+            })
+            .process({
+                path: path.resolve("docs/guide.md"),
+                value: `# Guide
+
+### Details
+
+## Usage
+
+#### Nested
+`,
+            });
+
+        expect(file.messages.map((message) => message.reason)).toStrictEqual([
+            "Heading levels must not skip from H1 to H3.",
+            "Heading levels must not skip from H2 to H4.",
+        ]);
+    });
+
     it("supports remark-lint severity tuple configuration", async () => {
         const file = await remark()
             .use(remarkLintDocHeadings, [

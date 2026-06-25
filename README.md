@@ -5,10 +5,12 @@
 Remark lint rule for enforcing documentation heading structure in selected
 Markdown files.
 
-The default rule is intentionally generic: it checks matched Markdown files for a
-single H1 and duplicate H2 headings, then enforces H2 order and required H2
-sections only when `h2Headings` is configured. ESLint rule-documentation
-conventions are available as explicit `eslint` and `eslintStrict` presets.
+The default rule is intentionally generic: it checks matched Markdown files for
+one H1 and duplicate H2 headings. Configure `h2Headings` when a documentation
+set has known sections; those definitions become the allowed H2 headings, the
+required H2 headings, and, by default, the expected H2 order. ESLint
+rule-documentation conventions are available as explicit `eslint` and
+`eslintStrict` presets.
 
 ## Install
 
@@ -39,10 +41,45 @@ export default {
 };
 ```
 
+Configured `h2Headings` enforce heading order by default. Set
+`requireH2HeadingOrder: false` when those headings may appear in any order:
+
+```mjs
+[
+ remarkLintDocHeadings,
+ {
+  include: ["docs/guides/**/*.md", "docs/reference/**/*.mdx"],
+  h2Headings: [
+   { heading: "Summary", required: true },
+   { heading: "Usage", required: true },
+   { heading: "Options" },
+   { heading: "Examples" },
+  ],
+  requireH2HeadingOrder: false,
+ },
+];
+```
+
 With no options, the rule applies generic checks to Markdown-family files:
 
 - exactly one H1 heading
 - no duplicate H2 headings
+
+## Generic Options
+
+- `include`: glob or globs to lint. Defaults to Markdown-family files.
+- `exclude`: glob or globs to skip after include matching.
+- `h1`: H1 validation options, or `false` to disable H1 checks. The generic
+  default requires exactly one H1 but does not require file-name matching.
+- `h2Headings`: H2 definitions with optional `required` flags. When configured,
+  these headings are the known H2 schema for matched files.
+- `requireH2HeadingOrder`: require configured H2 headings to follow the
+  `h2Headings` sequence. Defaults to `true`.
+- `allowUnknownHeadings`: allow H2 headings not listed in `h2Headings`. Defaults
+  to `true` with no `h2Headings` and `false` when `h2Headings` is configured.
+- `detailHeadings`: H3 headings with optional allowed H2 parent headings.
+- `requireNoSkippedHeadingLevels`: report heading level jumps such as H1 to H3
+  or H2 to H4. Defaults to `false`.
 
 ## ESLint Rule Doc Presets
 
@@ -96,27 +133,31 @@ reading`.
 Disable individual built-in checks with `headings`:
 
 ```mjs
-[
- remarkLintDocHeadings,
- {
-  headings: {
-   additionalExamples: false,
-   packageDocumentation: false,
-  },
- },
-];
+import remarkLintDocHeadings, { eslintOptions } from "remark-lint-doc-headings";
+
+export default {
+ plugins: [
+  [
+   remarkLintDocHeadings,
+   {
+    ...eslintOptions,
+    headings: {
+     ...eslintOptions.headings,
+     additionalExamples: false,
+     packageDocumentation: false,
+    },
+   },
+  ],
+ ],
+};
 ```
 
-## Options
+## ESLint-Specific Options
 
-- `include`: glob or globs to lint. Defaults to Markdown-family files.
-- `exclude`: glob or globs to skip after include matching.
-- `h1`: H1 validation options, or `false` to disable H1 checks.
-- `h2Headings`: ordered H2 definitions with optional `required` flags.
-- `detailHeadings`: H3 headings with optional allowed H2 parent headings.
-- `allowUnknownHeadings`: allow H2 headings not listed in `h2Headings`.
+These options are mainly useful for ESLint-style rule documentation. The
+`eslint` and `eslintStrict` presets configure the common values for them.
+
 - `headings`: built-in ESLint rule-doc heading toggles.
-- `ruleNamespaceAliases`: extra aliases accepted for ESLint rule-doc H1 titles.
 - `requireDeprecatedReplacementLink`: require links in `## Deprecated` sections.
   The ESLint presets enable this check.
 - `requirePackageDocumentation`: require `## Package documentation`.
@@ -128,6 +169,7 @@ Disable individual built-in checks with `headings`:
 - `requireRuleCatalogId`: require exactly one rule catalog marker line.
 - `ruleCatalogIdLinePattern`: catalog marker pattern as a `RegExp` or pattern
   string.
+- `ruleNamespaceAliases`: extra aliases accepted for ESLint rule-doc H1 titles.
 
 ## H1 Matching
 
@@ -144,3 +186,23 @@ When file-name matching is enabled, the rule accepts:
 
 The ESLint presets enable file-name matching. Set `h1: false` for documentation
 where H1 checks are not useful.
+
+## Contributors ✨
+
+<!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
+
+[![All Contributors](https://img.shields.io/badge/all_contributors-0-orange.svg?style=flat-square)](#contributors-)
+
+<!-- ALL-CONTRIBUTORS-BADGE:END -->
+
+Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/docs/en/emoji-key)):
+
+<!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
+<!-- prettier-ignore-start -->
+<!-- markdownlint-disable -->
+<!-- markdownlint-restore -->
+<!-- prettier-ignore-end -->
+
+<!-- ALL-CONTRIBUTORS-LIST:END -->
+
+This project follows the [all-contributors](https://github.com/all-contributors/all-contributors) specification. Contributions of any kind welcome!
