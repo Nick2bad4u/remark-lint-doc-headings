@@ -38,6 +38,27 @@ const config = [
         },
     },
     {
+        files: ["**/*.{yaml,yml}"],
+        name: "Local Shared Yamllint Policy",
+        rules: {
+            "yamllint/yamllint": [
+                "error",
+                {
+                    configFile:
+                        "./node_modules/yamllint-config-nick2bad4u/.yamllint",
+                },
+            ],
+        },
+    },
+    {
+        files: ["**/*.toml"],
+        name: "Local Stable TOML Formatting",
+        rules: {
+            // Tombi 1.1.7 formats the same TOML differently on Windows and Linux.
+            "tombi/tombi": "off",
+        },
+    },
+    {
         files: ["test/**/*.ts"],
         name: "Local Integration Test Style",
         rules: {

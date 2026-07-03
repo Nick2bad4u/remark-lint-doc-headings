@@ -141,8 +141,7 @@ export type RuleDocDetailHeadingKey = "detectionBoundaries" | "matchedPatterns";
 
 /** Built-in ESLint rule documentation heading keys. */
 export type RuleDocHeadingKey =
-    | RuleDocDetailHeadingKey
-    | RuleDocPrimaryHeadingKey;
+    RuleDocDetailHeadingKey | RuleDocPrimaryHeadingKey;
 
 /** Built-in ESLint rule documentation H2 heading keys. */
 export type RuleDocPrimaryHeadingKey =
