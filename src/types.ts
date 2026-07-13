@@ -8,7 +8,12 @@ export interface DetailHeadingDefinition extends HeadingDefinition {
 
 /** Configuration accepted by remark-lint-doc-headings. */
 export type DocHeadingsConfig =
-    | [level: boolean | Label | Severity, option?: DocHeadingsOptions]
+    | [
+        level: | boolean
+        | Label
+        | Severity,
+        option?: DocHeadingsOptions,
+    ]
     | DocHeadingsOptions
     | false
     | Label

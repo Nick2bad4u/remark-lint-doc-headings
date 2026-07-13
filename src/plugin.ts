@@ -933,7 +933,10 @@ const remarkLintDocHeadings: DocHeadingsPlugin = lintRule(
     (
         tree: Root,
         file: VFile,
-        settings: DocHeadingsOptions | false | undefined
+        settings:
+            | DocHeadingsOptions
+            | false
+            | undefined
     ) => {
         if (settings === false) {
             return;

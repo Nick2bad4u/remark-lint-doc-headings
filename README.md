@@ -83,7 +83,7 @@ With no options, the rule applies generic checks to Markdown-family files:
 
 ## ESLint Rule Doc Presets
 
-Use the standard ESLint rule-doc preset when you want this package’s built-in
+Use the standard ESLint rule-doc preset when you want this package's built-in
 rule documentation conventions:
 
 ```mjs
