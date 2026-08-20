@@ -148,7 +148,7 @@
         "runtime": {
             "name": "node",
             "onFail": "error",
-            "version": "^22.22.2 || ^24.15.0 || >=26.0.0"
+            "version": "^22.22.3 || ^24.16.0 || >=26.3.0"
         }
     },
     "publishConfig": {
