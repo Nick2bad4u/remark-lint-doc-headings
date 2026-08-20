@@ -61,7 +61,7 @@ jobs:
                   package-manager-cache: false
 
             - name: "Install the repository npm version"
-              run: "npm install --global npm@12.0.2"
+              run: "npm install --global --ignore-scripts npm@12.0.2"
 
             - name: "Resolve npm cache directory"
               id: "npm-cache"
@@ -133,7 +133,17 @@ jobs:
                   set -euo pipefail
 
                   package_name="$(node -p "require('./package.json').name")"
-                  published_versions="$(npm view "$package_name" versions --json)"
+                  registry_error="$(mktemp)"
+                  if published_versions="$(npm view "$package_name" versions --json 2>"$registry_error")"; then
+                    :
+                  elif grep -Eq "E404|404 Not Found" "$registry_error"; then
+                    published_versions="[]"
+                  else
+                    cat "$registry_error" >&2
+                    echo "::error::Could not query published versions for $package_name."
+                    exit 1
+                  fi
+                  rm -f "$registry_error"
                   export published_versions RELEASE_VERSION
 
                   if node -e "const versions = JSON.parse(process.env.published_versions); process.exit(versions.includes(process.env.RELEASE_VERSION) ? 0 : 1)"; then
