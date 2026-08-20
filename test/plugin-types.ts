@@ -37,8 +37,9 @@ export const options: DocHeadingsOptions = {
     ruleNamespaceAliases: ["example"],
 };
 
-const eslintPreset: DocHeadingsPreset = eslint;
-const eslintStrictPreset: DocHeadingsPreset = presets["eslint-strict"];
+const typedPresets: readonly DocHeadingsPreset[] = [
+    eslint,
+    presets["eslint-strict"],
+];
 
-void eslintPreset;
-void eslintStrictPreset;
+export const presetCount = typedPresets.length;

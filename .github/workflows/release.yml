@@ -38,7 +38,7 @@ permissions:
 
 concurrency:
     group: "release-${{ github.ref || inputs.version || inputs.release_type }}"
-    cancel-in-progress: true
+    cancel-in-progress: "${{ false }}"
 
 jobs:
     release:
@@ -54,11 +54,26 @@ jobs:
                   ref: "${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}"
 
             - name: "Setup Node"
-              uses: "actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e" # v6.4.0
+              uses: "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020" # v7.0.0
               with:
-                  node-version: "24"
+                  node-version-file: ".node-version"
                   registry-url: "https://registry.npmjs.org"
                   package-manager-cache: false
+
+            - name: "Install the repository npm version"
+              run: "npm install --global --ignore-scripts npm@12.0.2"
+
+            - name: "Resolve npm cache directory"
+              id: "npm-cache"
+              run: |
+                  echo "directory=$(npm config get cache)" >> "$GITHUB_OUTPUT"
+
+            - name: "Cache npm downloads"
+              uses: "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9" # v6.1.0
+              with:
+                  path: "${{ steps.npm-cache.outputs.directory }}"
+                  key: "${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}"
+                  restore-keys: "${{ runner.os }}-npm-"
 
             - name: "Install"
               run: "npm ci"
@@ -107,6 +122,50 @@ jobs:
 
                   echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
                   echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+            - name: "Verify release target is unused"
+              if: "github.event_name == 'workflow_dispatch'"
+              env:
+                  GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+                  RELEASE_TAG: "${{ steps.vars.outputs.tag }}"
+                  RELEASE_VERSION: "${{ steps.vars.outputs.version }}"
+              run: |
+                  set -euo pipefail
+
+                  package_name="$(node -p "require('./package.json').name")"
+                  registry_error="$(mktemp)"
+                  if published_versions="$(npm view "$package_name" versions --json 2>"$registry_error")"; then
+                    :
+                  elif grep -Eq "E404|404 Not Found" "$registry_error"; then
+                    published_versions="[]"
+                  else
+                    cat "$registry_error" >&2
+                    echo "::error::Could not query published versions for $package_name."
+                    exit 1
+                  fi
+                  rm -f "$registry_error"
+                  export published_versions RELEASE_VERSION
+
+                  if node -e "const versions = JSON.parse(process.env.published_versions); process.exit(versions.includes(process.env.RELEASE_VERSION) ? 0 : 1)"; then
+                    echo "::error::$package_name@$RELEASE_VERSION already exists on npm."
+                    exit 1
+                  fi
+
+                  if git show-ref --verify --quiet "refs/tags/${RELEASE_TAG}"; then
+                    echo "::error::Git tag $RELEASE_TAG already exists."
+                    exit 1
+                  fi
+
+                  release_error="$(mktemp)"
+                  if gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --silent 2>"$release_error"; then
+                    echo "::error::GitHub release $RELEASE_TAG already exists."
+                    exit 1
+                  fi
+                  if ! grep -q "HTTP 404" "$release_error"; then
+                    cat "$release_error" >&2
+                    echo "::error::Could not verify whether GitHub release $RELEASE_TAG exists."
+                    exit 1
+                  fi
 
             - name: "Prepare package version"
               run: "npm version --allow-same-version --no-git-tag-version '${{ steps.vars.outputs.version }}'"

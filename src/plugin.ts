@@ -191,6 +191,60 @@ export type DocHeadingsPreset = Preset;
 
 const normalizePath = (value: string): string => value.replaceAll("\\", "/");
 
+function cachePackageMetadata(
+    directories: readonly string[],
+    metadata: PackageMetadata | undefined
+): PackageMetadata | undefined {
+    for (const directory of directories) {
+        packageMetadataCache.set(directory, metadata);
+    }
+
+    return metadata;
+}
+
+function collectDetailHeadingIndexes(
+    tree: Root,
+    file: VFile,
+    detailHeadingByTitle: ReadonlyMap<string, DetailHeadingDefinition>
+): ReadonlyMap<string, number> {
+    let currentH2HeadingName: string | undefined;
+    const detailHeadingIndexes = new Map<string, number>();
+
+    for (const [index, node] of tree.children.entries()) {
+        if (!isHeadingNode(node)) {
+            continue;
+        }
+
+        const headingName = getNodeText(node).trim();
+
+        if (node.depth === 2) {
+            currentH2HeadingName = headingName;
+            continue;
+        }
+
+        if (node.depth !== 3) {
+            continue;
+        }
+
+        const detailHeading = detailHeadingByTitle.get(headingName);
+
+        if (!isDefined(detailHeading)) {
+            continue;
+        }
+
+        validateDetailHeadingParent(
+            file,
+            node,
+            headingName,
+            detailHeading,
+            currentH2HeadingName
+        );
+        detailHeadingIndexes.set(headingName, index);
+    }
+
+    return detailHeadingIndexes;
+}
+
 function getEnabledDetailHeadings(
     headings: Partial<Record<RuleDocHeadingKey, boolean>> | undefined
 ): readonly DetailHeadingDefinition[] {
@@ -244,47 +298,22 @@ function getNearestPackageMetadata(
         if (packageMetadataCache.has(currentDirectory)) {
             const cached = packageMetadataCache.get(currentDirectory);
 
-            for (const directory of traversedDirectories) {
-                packageMetadataCache.set(directory, cached);
-            }
-
-            return cached;
+            return cachePackageMetadata(traversedDirectories, cached);
         }
 
         const packageJsonPath = path.join(currentDirectory, "package.json");
 
         if (existsSync(packageJsonPath)) {
-            let metadata: PackageMetadata | undefined;
-
-            try {
-                const parsedMetadata: unknown = JSON.parse(
-                    readFileSync(packageJsonPath, "utf8")
-                );
-
-                metadata =
-                    typeof parsedMetadata === "object" &&
-                    parsedMetadata !== null
-                        ? parsedMetadata
-                        : undefined;
-            } catch {
-                metadata = undefined;
-            }
-
-            for (const directory of traversedDirectories) {
-                packageMetadataCache.set(directory, metadata);
-            }
-
-            return metadata;
+            return cachePackageMetadata(
+                traversedDirectories,
+                readPackageMetadata(packageJsonPath)
+            );
         }
 
         const parentDirectory = path.dirname(currentDirectory);
 
         if (parentDirectory === currentDirectory) {
-            for (const directory of traversedDirectories) {
-                packageMetadataCache.set(directory, undefined);
-            }
-
-            return undefined;
+            return cachePackageMetadata(traversedDirectories, undefined);
         }
 
         currentDirectory = parentDirectory;
@@ -533,60 +562,63 @@ function patternsToArray(patterns: PathPattern): readonly string[] {
     return typeof patterns === "string" ? [patterns] : patterns;
 }
 
+function readPackageMetadata(
+    packageJsonPath: string
+): PackageMetadata | undefined {
+    try {
+        const parsedMetadata: unknown = JSON.parse(
+            readFileSync(packageJsonPath, "utf8")
+        );
+
+        return typeof parsedMetadata === "object" && parsedMetadata !== null
+            ? parsedMetadata
+            : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
 function report(file: VFile, reason: string, place: Heading | undefined): void {
     file.message(reason, place);
 }
 
-function validateDetailHeadings(
-    tree: Root,
+function validateDeprecatedReplacementLink(
     file: VFile,
-    detailHeadings: readonly DetailHeadingDefinition[]
+    h2Headings: readonly Heading[],
+    deprecatedSectionIndex: number,
+    requireDeprecatedReplacementLink: boolean
 ): void {
-    const detailHeadingByTitle = new Map(
-        detailHeadings.map((heading) => [heading.heading, heading])
-    );
-    let currentH2HeadingName: string | undefined;
-    const detailHeadingIndexes = new Map<string, number>();
-
-    for (const [index, node] of tree.children.entries()) {
-        if (!isHeadingNode(node)) {
-            continue;
-        }
-
-        const headingName = getNodeText(node).trim();
-
-        if (node.depth === 2) {
-            currentH2HeadingName = headingName;
-            continue;
-        }
-
-        if (node.depth !== 3) {
-            continue;
-        }
-
-        const detailHeading = detailHeadingByTitle.get(headingName);
-
-        if (!isDefined(detailHeading)) {
-            continue;
-        }
-
-        if (
-            isDefined(detailHeading.parents) &&
-            !arrayIncludes(detailHeading.parents, currentH2HeadingName ?? "")
-        ) {
-            report(
-                file,
-                `\`### ${headingName}\` must be placed under one of: ${arrayJoin(
-                    detailHeading.parents.map((parent) => `\`## ${parent}\``),
-                    ", "
-                )}.`,
-                node
-            );
-        }
-
-        detailHeadingIndexes.set(headingName, index);
+    if (!requireDeprecatedReplacementLink || deprecatedSectionIndex === -1) {
+        return;
     }
 
+    const deprecatedHeading = h2Headings[deprecatedSectionIndex];
+
+    if (!isDefined(deprecatedHeading)) {
+        return;
+    }
+
+    const deprecatedContent = getSectionContent(
+        file,
+        deprecatedHeading,
+        h2Headings[deprecatedSectionIndex + 1]
+    );
+
+    if (!hasMarkdownLinkMarker(deprecatedContent)) {
+        report(
+            file,
+            "`## Deprecated` should include a link to the recommended replacement rule or package.",
+            deprecatedHeading
+        );
+    }
+}
+
+function validateDetailHeadingOrder(
+    tree: Root,
+    file: VFile,
+    detailHeadings: readonly DetailHeadingDefinition[],
+    detailHeadingIndexes: ReadonlyMap<string, number>
+): void {
     for (const [leftIndex, left] of detailHeadings.entries()) {
         const leftHeadingIndex = detailHeadingIndexes.get(left.heading);
 
@@ -609,6 +641,52 @@ function validateDetailHeadings(
             }
         }
     }
+}
+
+function validateDetailHeadingParent(
+    file: VFile,
+    node: Heading,
+    headingName: string,
+    detailHeading: DetailHeadingDefinition,
+    currentH2HeadingName: string | undefined
+): void {
+    if (
+        !isDefined(detailHeading.parents) ||
+        arrayIncludes(detailHeading.parents, currentH2HeadingName ?? "")
+    ) {
+        return;
+    }
+
+    report(
+        file,
+        `\`### ${headingName}\` must be placed under one of: ${arrayJoin(
+            detailHeading.parents.map((parent) => `\`## ${parent}\``),
+            ", "
+        )}.`,
+        node
+    );
+}
+
+function validateDetailHeadings(
+    tree: Root,
+    file: VFile,
+    detailHeadings: readonly DetailHeadingDefinition[]
+): void {
+    const detailHeadingByTitle = new Map(
+        detailHeadings.map((heading) => [heading.heading, heading])
+    );
+    const detailHeadingIndexes = collectDetailHeadingIndexes(
+        tree,
+        file,
+        detailHeadingByTitle
+    );
+
+    validateDetailHeadingOrder(
+        tree,
+        file,
+        detailHeadings,
+        detailHeadingIndexes
+    );
 }
 
 function validateDuplicateHeadings(
@@ -788,6 +866,117 @@ function validateHeadingLevels(
     }
 }
 
+function validatePackageDocumentationLabel(
+    file: VFile,
+    h2Headings: readonly Heading[],
+    packageDocumentationIndex: number,
+    options: NormalizedOptions
+): void {
+    if (
+        !options.requirePackageDocumentationLabel ||
+        packageDocumentationIndex === -1
+    ) {
+        return;
+    }
+
+    const packageHeading = h2Headings[packageDocumentationIndex];
+
+    if (!isDefined(packageHeading)) {
+        return;
+    }
+
+    const packageContent = getSectionContent(
+        file,
+        packageHeading,
+        h2Headings[packageDocumentationIndex + 1]
+    );
+    const hasLabel = isDefined(options.packageDocumentationLabelPattern)
+        ? options.packageDocumentationLabelPattern.test(packageContent)
+        : hasPackageDocumentationLabel(packageContent);
+
+    if (!hasLabel) {
+        report(
+            file,
+            "`## Package documentation` must include at least one `<package> package documentation:` label line.",
+            packageHeading
+        );
+    }
+}
+
+function validatePackageDocumentationPlacement(
+    file: VFile,
+    h2Headings: readonly Heading[],
+    packageDocumentationIndex: number,
+    furtherReadingIndex: number,
+    shouldValidatePackageDocumentationPlacement: boolean
+): void {
+    if (
+        !shouldValidatePackageDocumentationPlacement ||
+        packageDocumentationIndex === -1 ||
+        furtherReadingIndex === -1 ||
+        packageDocumentationIndex === furtherReadingIndex - 1
+    ) {
+        return;
+    }
+
+    report(
+        file,
+        "`## Package documentation` must appear immediately before `## Further reading`.",
+        h2Headings[packageDocumentationIndex]
+    );
+}
+
+function validateRequiredPackageDocumentation(
+    file: VFile,
+    packageDocumentationIndex: number,
+    requirePackageDocumentation: boolean
+): void {
+    if (!requirePackageDocumentation || packageDocumentationIndex !== -1) {
+        return;
+    }
+
+    report(
+        file,
+        "Missing required `## Package documentation` section.",
+        undefined
+    );
+}
+
+function validateRuleCatalogId(
+    file: VFile,
+    h2Headings: readonly Heading[],
+    furtherReadingIndex: number,
+    options: NormalizedOptions
+): void {
+    if (!options.requireRuleCatalogId) {
+        return;
+    }
+
+    const ruleCatalogIdLines = stringSplit(
+        String(file.value).replaceAll("\r\n", "\n"),
+        "\n"
+    )
+        .map((line) => line.trimEnd())
+        .filter((line) => options.ruleCatalogIdLinePattern.test(line));
+    const place = h2Headings[furtherReadingIndex] ?? arrayFirst(h2Headings);
+
+    if (isEmpty(ruleCatalogIdLines)) {
+        report(
+            file,
+            "Missing required rule catalog marker line `> **Rule catalog ID:** R###`.",
+            place
+        );
+    }
+
+    if (ruleCatalogIdLines.length > 1) {
+        report(
+            file,
+            "Rule docs must contain exactly one `> **Rule catalog ID:** R###` marker line.",
+            place
+        );
+    }
+}
+
 function validateSpecialSections(
     file: VFile,
     h2Headings: readonly Heading[],
@@ -802,108 +991,31 @@ function validateSpecialSections(
     const deprecatedSectionIndex = headingNames.indexOf("Deprecated");
     const furtherReadingIndex = headingNames.indexOf("Further reading");
 
-    if (
-        options.requirePackageDocumentation &&
-        packageDocumentationIndex === -1
-    ) {
-        report(
-            file,
-            "Missing required `## Package documentation` section.",
-            undefined
-        );
-    }
-
-    if (
-        options.requireDeprecatedReplacementLink &&
-        deprecatedSectionIndex !== -1
-    ) {
-        const deprecatedHeading = h2Headings[deprecatedSectionIndex];
-
-        if (!isDefined(deprecatedHeading)) {
-            return;
-        }
-
-        const deprecatedContent = getSectionContent(
-            file,
-            deprecatedHeading,
-            h2Headings[deprecatedSectionIndex + 1]
-        );
-
-        if (!hasMarkdownLinkMarker(deprecatedContent)) {
-            report(
-                file,
-                "`## Deprecated` should include a link to the recommended replacement rule or package.",
-                deprecatedHeading
-            );
-        }
-    }
-
-    if (
-        options.shouldValidatePackageDocumentationPlacement &&
-        packageDocumentationIndex !== -1 &&
-        furtherReadingIndex !== -1 &&
-        packageDocumentationIndex !== furtherReadingIndex - 1
-    ) {
-        report(
-            file,
-            "`## Package documentation` must appear immediately before `## Further reading`.",
-            h2Headings[packageDocumentationIndex]
-        );
-    }
-
-    if (
-        options.requirePackageDocumentationLabel &&
-        packageDocumentationIndex !== -1
-    ) {
-        const packageHeading = h2Headings[packageDocumentationIndex];
-
-        if (!isDefined(packageHeading)) {
-            return;
-        }
-
-        const packageContent = getSectionContent(
-            file,
-            packageHeading,
-            h2Headings[packageDocumentationIndex + 1]
-        );
-        const hasLabel = isDefined(options.packageDocumentationLabelPattern)
-            ? options.packageDocumentationLabelPattern.test(packageContent)
-            : hasPackageDocumentationLabel(packageContent);
-
-        if (!hasLabel) {
-            report(
-                file,
-                "`## Package documentation` must include at least one `<package> package documentation:` label line.",
-                packageHeading
-            );
-        }
-    }
-
-    if (options.requireRuleCatalogId) {
-        const ruleCatalogIdLines = stringSplit(
-            String(file.value).replaceAll("\r\n", "\n"),
-            "\n"
-        )
-            .map((line) => line.trimEnd())
-            .filter((line) => options.ruleCatalogIdLinePattern.test(line));
-        const place = h2Headings[furtherReadingIndex] ?? arrayFirst(h2Headings);
-
-        if (isEmpty(ruleCatalogIdLines)) {
-            report(
-                file,
-                "Missing required rule catalog marker line `> **Rule catalog ID:** R###`.",
-                place
-            );
-        }
-
-        if (ruleCatalogIdLines.length > 1) {
-            report(
-                file,
-                "Rule docs must contain exactly one `> **Rule catalog ID:** R###` marker line.",
-                place
-            );
-        }
-    }
+    validateRequiredPackageDocumentation(
+        file,
+        packageDocumentationIndex,
+        options.requirePackageDocumentation
+    );
+    validateDeprecatedReplacementLink(
+        file,
+        h2Headings,
+        deprecatedSectionIndex,
+        options.requireDeprecatedReplacementLink
+    );
+    validatePackageDocumentationPlacement(
+        file,
+        h2Headings,
+        packageDocumentationIndex,
+        furtherReadingIndex,
+        options.shouldValidatePackageDocumentationPlacement
+    );
+    validatePackageDocumentationLabel(
+        file,
+        h2Headings,
+        packageDocumentationIndex,
+        options
+    );
+    validateRuleCatalogId(file, h2Headings, furtherReadingIndex, options);
 }
 
 function withRequiredHeadings(

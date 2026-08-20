@@ -51,14 +51,28 @@ jobs:
               uses: "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0" # v7.0.0
 
             - name: "Setup Node.js"
-              uses: "actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e" # v6.4.0
+              uses: "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020" # v7.0.0
               with:
                   node-version-file: ".node-version"
-                  cache: "npm"
-                  cache-dependency-path: "package-lock.json"
+                  package-manager-cache: false
+
+            - name: "Install the repository npm version"
+              run: "npm install --global --ignore-scripts npm@12.0.2"
+
+            - name: "Resolve npm cache directory"
+              id: "npm-cache"
+              run: |
+                  echo "directory=$(npm config get cache)" >> "$GITHUB_OUTPUT"
+
+            - name: "Cache npm downloads"
+              uses: "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9" # v6.1.0
+              with:
+                  path: "${{ steps.npm-cache.outputs.directory }}"
+                  key: "${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}"
+                  restore-keys: "${{ runner.os }}-npm-"
 
             - name: "Install dependencies"
-              run: "npm ci --force"
+              run: "npm ci"
 
             - name: "Build package"
               run: "npm run build"
@@ -67,7 +81,7 @@ jobs:
               run: "npm run typecheck"
 
             - name: "Run tests with coverage and JUnit report"
-              run: "npx vitest run --coverage --reporter=github-actions --reporter=dot --reporter=junit --outputFile=test-report.junit.xml --silent"
+              run: "npm run coverage -- --reporter=github-actions --reporter=dot --reporter=junit --outputFile=test-report.junit.xml --silent"
               env:
                   CI: "true"
                   MAX_THREADS: "1"
@@ -81,8 +95,20 @@ jobs:
               run: >-
                   python -c "from pathlib import Path; assert Path('test-report.junit.xml').is_file(), 'test-report.junit.xml was not generated'"
 
+            - name: "Detect Codecov token"
+              id: "codecov-token"
+              if: "${{ !cancelled() }}"
+              env:
+                  CODECOV_TOKEN: "${{ secrets.CODECOV_TOKEN }}"
+              run: |
+                  if [ -n "$CODECOV_TOKEN" ]; then
+                    echo "available=true" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "available=false" >> "$GITHUB_OUTPUT"
+                  fi
+
             - name: "Upload test results to Codecov"
-              if: "${{ !cancelled() && env.CODECOV_TOKEN != '' }}"
+              if: "${{ !cancelled() && steps.codecov-token.outputs.available == 'true' }}"
               uses: "codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f" # v7.0.0
               env:
                   CODECOV_TOKEN: "${{ secrets.CODECOV_TOKEN }}"
@@ -98,7 +124,7 @@ jobs:
                   verbose: true
 
             - name: "Upload coverage to Codecov"
-              if: "${{ !cancelled() && env.CODECOV_TOKEN != '' }}"
+              if: "${{ !cancelled() && steps.codecov-token.outputs.available == 'true' }}"
               uses: "codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f" # v7.0.0
               env:
                   CODECOV_TOKEN: "${{ secrets.CODECOV_TOKEN }}"
@@ -133,11 +159,25 @@ jobs:
               uses: "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0" # v7.0.0
 
             - name: "Setup Node.js"
-              uses: "actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e" # v6.4.0
+              uses: "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020" # v7.0.0
               with:
                   node-version-file: ".node-version"
-                  cache: "npm"
-                  cache-dependency-path: "package-lock.json"
+                  package-manager-cache: false
+
+            - name: "Install the repository npm version"
+              run: "npm install --global --ignore-scripts npm@12.0.2"
+
+            - name: "Resolve npm cache directory"
+              id: "npm-cache"
+              run: |
+                  echo "directory=$(npm config get cache)" >> "$GITHUB_OUTPUT"
+
+            - name: "Cache npm downloads"
+              uses: "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9" # v6.1.0
+              with:
+                  path: "${{ steps.npm-cache.outputs.directory }}"
+                  key: "${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}"
+                  restore-keys: "${{ runner.os }}-npm-"
 
             - name: "Install native lint tools"
               run: |
@@ -148,7 +188,7 @@ jobs:
                   echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
 
             - name: "Install dependencies"
-              run: "npm ci --force"
+              run: "npm ci"
 
             - name: "Run full verification pipeline"
               run: "npm run release:verify"
