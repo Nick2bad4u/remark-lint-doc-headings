@@ -1,6 +1,7 @@
 dist
 node_modules
 coverage
+.lychee.report.md
 **/agent-commit-message-instructions.md
 .github/agent-commit-message-instructions.md
 **/AGENTS.md
