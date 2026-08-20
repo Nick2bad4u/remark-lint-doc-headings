@@ -462,6 +462,62 @@ Reference.
         );
     });
 
+    it("reports misplaced package docs, duplicate catalog IDs, and invalid detail parents", async () => {
+        const file = await processMarkdown(
+            `# no-bad-practice
+
+## Targeted pattern scope
+
+Scope.
+
+## What this rule reports
+
+## Why this rule exists
+
+### Matched patterns
+
+Patterns.
+
+Rationale.
+
+## ❌ Incorrect
+
+Bad.
+
+## ✅ Correct
+
+Good.
+
+## Package documentation
+
+Documentation.
+
+## When not to use it
+
+Guidance.
+
+## Further reading
+
+> **Rule catalog ID:** R001
+> **Rule catalog ID:** R002
+`,
+            {
+                ...eslintOptions,
+                requirePackageDocumentation: true,
+                requirePackageDocumentationPlacement: true,
+                requireRuleCatalogId: true,
+            }
+        );
+
+        expect(file.messages.map((message) => message.reason)).toEqual(
+            expect.arrayContaining([
+                "`### Matched patterns` must be placed under one of: `## Targeted pattern scope`, `## What this rule reports`.",
+                "`## Package documentation` must appear immediately before `## Further reading`.",
+                "Rule docs must contain exactly one `> **Rule catalog ID:** R###` marker line.",
+            ])
+        );
+    });
+
     it("exports an ESLint preset for standard rule docs", async () => {
         const file = await remark()
             .use(eslint)
